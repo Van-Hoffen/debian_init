@@ -54,13 +54,13 @@
 
 1. Склонируйте репозиторий:
    ```bash
-   git clone https://github.com/Van-Hoffen/debian_init
+   git clone https://github.com/Van-Hoffen/debian_init /
    cd debian-setup
    ```
 
 2. Запустите скрипт:
    ```bash
-   chmod +x debian_setup.sh
+   chmod +x debian_setup.sh /
    ./debian_setup.sh
    ```
 
