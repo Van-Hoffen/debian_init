@@ -54,7 +54,7 @@
 
 1. Склонируйте репозиторий:
    ```bash
-   git clone <URL_репозитория>
+   git clone https://github.com/Van-Hoffen/debian_init
    cd debian-setup
    ```
 
