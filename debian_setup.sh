@@ -273,5 +273,37 @@ else
     log_warn "Docker уже установлен"
 fi
 
+# Функция для переименования файлов/директорий с запросом у пользователя
+rename_function() {
+    log_info "Хотите выполнить переименование каких-либо файлов или директорий? (y/N)"
+    read -r rename_response
+    if [[ "$rename_response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+        log_info "Введите путь к файлу или директории, которую нужно переименовать:"
+        read -r source_path
+        if [ -e "$source_path" ]; then
+            log_info "Введите новое имя:"
+            read -r new_name
+            dir_path=$(dirname "$source_path")
+            if [ "$dir_path" = "." ]; then
+                dir_path=""
+            else
+                dir_path="$dir_path/"
+            fi
+            new_path="${dir_path}${new_name}"
+            
+            log_info "Переименовываем '$source_path' в '$new_path'"
+            mv "$source_path" "$new_path"
+            log_info "Переименование выполнено успешно!"
+        else
+            log_error "Файл или директория '$source_path' не найдена!"
+        fi
+    else
+        log_info "Пропускаем переименование."
+    fi
+}
+
+# Вызов функции переименования
+rename_function
+
 log_info "Первичная инициализация системы завершена!"
 log_info "Рекомендуется перезапустить сессию или выполнить 'source ~/.bashrc' для применения всех изменений."
