@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Скрипт для первичной инициализации системы на базе Debian под стандарты пользователя
+# Скрипт для первичной инициализации системы на базе Debian под стандарты системного администратора и DevOps специалиста
 
 set -e  # Прерывать выполнение при ошибках
 
@@ -10,7 +10,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}Начинаем первичную инициализацию системы Debian${NC}"
+echo -e "${GREEN}Начинаем первичную инициализацию системы Debian для системного администратора и DevOps специалиста${NC}"
 
 # Функция для вывода сообщений
 log_info() {
@@ -43,27 +43,32 @@ sudo apt update
 log_info "Обновляем систему..."
 sudo apt upgrade -y
 
-# Установка базовых пакетов
+# Установка базовых пакетов для системного администратора и DevOps специалиста
 log_info "Устанавливаем базовые пакеты..."
 BASE_PACKAGES=(
+    "sudo"
     "curl"
-    "wget"
-    "git"
-    "vim"
-    "tmux"
-    "build-essential"
-    "zsh"
-    "htop"
-    "tree"
-    "unzip"
-    "zip"
+    "ncdu"
     "mc"
-    "neofetch"
-    "software-properties-common"
+    "lm-sensors"
+    "strace"
+    "htop"
+    "nload"
+    "tmux"
+    "docker.io"
+    "docker-compose"
+    "zabbix-agent"
+    "git"
+    "fzf"
     "apt-transport-https"
     "ca-certificates"
     "gnupg"
     "lsb-release"
+    "unzip"
+    "zip"
+    "build-essential"
+    "wget"
+    "zsh"
 )
 
 for package in "${BASE_PACKAGES[@]}"; do
@@ -89,43 +94,53 @@ else
     log_warn "Файл /workspace/tmux.conf не найден"
 fi
 
-# Установка zsh как основной оболочки (если пользователь хочет)
-log_info "Устанавливаем zsh как основную оболочку..."
-if command -v zsh &> /dev/null; then
-    chsh -s "$(which zsh)"
-    log_info "zsh установлена как основная оболочка"
+# Выбор оболочки (zsh или bash)
+log_info "Выберите предпочитаемую оболочку:"
+echo "1) zsh"
+echo "2) bash"
+read -p "Введите номер (1 или 2): " shell_choice
+
+if [[ "$shell_choice" == "1" ]]; then
+    # Установка zsh как основной оболочки
+    log_info "Устанавливаем zsh как основную оболочку..."
+    if command -v zsh &> /dev/null; then
+        chsh -s "$(which zsh)"
+        log_info "zsh установлена как основная оболочка"
+    else
+        log_warn "zsh не найдена"
+    fi
+    
+    # Установка oh-my-zsh (если пользователь хочет)
+    log_info "Устанавливаем oh-my-zsh..."
+    if [ ! -d "$HOME/.oh-my-zsh" ]; then
+        sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+        log_info "oh-my-zsh установлена"
+    else
+        log_warn "oh-my-zsh уже установлена"
+    fi
+
+    # Установка powerlevel10k темы для zsh
+    log_info "Устанавливаем тему powerlevel10k для zsh..."
+    if [ ! -d "$HOME/.oh-my-zsh/custom/themes/powerlevel10k" ]; then
+        git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+        log_info "Тема powerlevel10k установлена"
+    else
+        log_warn "Тема powerlevel10k уже установлена"
+    fi
+
+    # Установка плагинов для zsh
+    log_info "Устанавливаем плагины для zsh..."
+    if [ ! -d "$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" ]; then
+        git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+        log_info "Плагин zsh-syntax-highlighting установлен"
+    fi
+
+    if [ ! -d "$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions" ]; then
+        git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+        log_info "Плагин zsh-autosuggestions установлен"
+    fi
 else
-    log_warn "zsh не найдена"
-fi
-
-# Установка oh-my-zsh (если пользователь хочет)
-log_info "Устанавливаем oh-my-zsh..."
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-    log_info "oh-my-zsh установлена"
-else
-    log_warn "oh-my-zsh уже установлена"
-fi
-
-# Установка powerlevel10k темы для zsh
-log_info "Устанавливаем тему powerlevel10k для zsh..."
-if [ ! -d "$HOME/.oh-my-zsh/custom/themes/powerlevel10k" ]; then
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
-    log_info "Тема powerlevel10k установлена"
-else
-    log_warn "Тема powerlevel10k уже установлена"
-fi
-
-# Установка плагинов для zsh
-log_info "Устанавливаем плагины для zsh..."
-if [ ! -d "$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" ]; then
-    git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-    log_info "Плагин zsh-syntax-highlighting установлен"
-fi
-
-if [ ! -d "$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions" ]; then
-    git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-    log_info "Плагин zsh-autosuggestions установлен"
+    log_info "Выбрана оболочка bash, пропускаем установку zsh"
 fi
 
 # Создание ~/.bash_aliases если не существует
@@ -149,6 +164,33 @@ alias clean='sudo apt clean'
 alias untar='tar -zxvf'
 alias zipf='zip -r'
 
+# Алиасы для системного администрирования
+alias top='htop'
+alias df='df -h'
+alias du='du -h'
+alias free='free -h'
+alias ps='ps aux'
+alias netstat='netstat -tuln'
+alias ncdu='ncdu --color dark'
+alias mc='mc -b'
+
+# Алиасы для работы с Docker и Docker Compose
+if command -v docker &> /dev/null; then
+    alias dps='docker ps'
+    alias di='docker images'
+    alias dsys='docker system prune -f'
+    alias dvol='docker volume ls'
+    alias dnet='docker network ls'
+fi
+
+if command -v docker-compose &> /dev/null; then
+    alias dc='docker-compose'
+    alias dcp='docker-compose ps'
+    alias dcl='docker-compose logs -f'
+    alias dcu='docker-compose up -d'
+    alias dcd='docker-compose down'
+fi
+
 # Алиасы для работы с Git
 alias gs='git status'
 alias ga='git add'
@@ -157,12 +199,6 @@ alias gp='git push'
 alias gl='git log --oneline'
 alias gb='git branch'
 alias gd='git diff'
-
-# Алиасы для работы с Docker (если установлен)
-if command -v docker &> /dev/null; then
-    alias dps='docker ps'
-    alias di='docker images'
-fi
 
 EOF
 
@@ -178,7 +214,7 @@ else
     log_warn "fzf уже установлена"
 fi
 
-# Добавление настроек для fzf в bashrc
+# Добавление настроек для fzf в bashrc и zshrc
 if grep -q 'fzf' ~/.bashrc; then
     log_info "Настройки fzf уже присутствуют в ~/.bashrc"
 else
@@ -188,9 +224,31 @@ else
     log_info "Настройки fzf добавлены в ~/.bashrc"
 fi
 
+# Добавление настроек для fzf в zshrc если используется zsh
+if [[ "$shell_choice" == "1" ]] && [ -f ~/.zshrc ]; then
+    if grep -q 'fzf' ~/.zshrc; then
+        log_info "Настройки fzf уже присутствуют в ~/.zshrc"
+    else
+        echo "" >> ~/.zshrc
+        echo "# FZF settings" >> ~/.zshrc
+        echo "[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh" >> ~/.zshrc
+        log_info "Настройки fzf добавлены в ~/.zshrc"
+    fi
+fi
+
 # Создание директорий для работы
 log_info "Создаем стандартные директории..."
 mkdir -p ~/Projects ~/Documents ~/Downloads ~/Temp ~/Scripts
+
+# Создание директории для Docker Compose файлов в /opt (для системного администратора)
+if [ "$EUID" -eq 0 ] || [ -w /opt ]; then
+    sudo mkdir -p /opt/docker-compose
+    log_info "Создана директория /opt/docker-compose для размещения docker-compose.yaml файлов"
+else
+    log_warn "Нет прав для создания директории в /opt, создаем в домашней директории"
+    mkdir -p ~/docker-compose
+    log_info "Создана директория ~/docker-compose для размещения docker-compose.yaml файлов"
+fi
 
 # Установка настроек git (если git установлен)
 if command -v git &> /dev/null; then
@@ -209,8 +267,8 @@ if command -v git &> /dev/null; then
         git config --global user.email "$git_email"
     fi
     
-    git config --global core.editor "vim"
-    git config --global merge.tool "vimdiff"
+    git config --global core.editor "mc"
+    git config --global merge.tool "mc"
     git config --global push.default "simple"
     log_info "Git настроен"
 fi
@@ -248,30 +306,24 @@ if command -v python3 &> /dev/null; then
     log_info "Python инструменты установлены"
 fi
 
-# Установка Docker (опционально)
-log_info "Устанавливаем Docker..."
-if ! command -v docker &> /dev/null; then
-    # Добавление официального GPG ключа Docker
-    sudo apt-get update
-    sudo apt-get install ca-certificates curl gnupg lsb-release
-    sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    
-    # Установка репозитория Docker
-    echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-      $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
-    sudo apt-get update
-    sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
-    
-    # Добавление текущего пользователя в группу docker
+# Добавление текущего пользователя в группу docker (если пакет docker.io установлен)
+if command -v docker &> /dev/null; then
     sudo usermod -aG docker $USER
-    
-    log_info "Docker установлен и пользователь добавлен в группу docker"
+    log_info "Пользователь добавлен в группу docker"
 else
-    log_warn "Docker уже установлен"
+    log_warn "Docker не установлен"
 fi
 
 log_info "Первичная инициализация системы завершена!"
-log_info "Рекомендуется перезапустить сессию или выполнить 'source ~/.bashrc' для применения всех изменений."
+log_info "Установлены инструменты для системного администрирования и DevOps:"
+log_info "  - Мониторинг: htop, nload, ncdu, lm-sensors"
+log_info "  - Управление файлами: mc, zip, unzip"
+log_info "  - Сеть: curl, nc"
+log_info "  - Отладка: strace"
+log_info "  - Docker и Docker Compose"
+log_info "  - Zabbix agent для мониторинга"
+log_info "  - Git и сопутствующие инструменты"
+log_info "  - Fuzzy finder (fzf) для удобства навигации"
+log_info ""
+log_info "Рекомендуется перезапустить сессию или выполнить 'source ~/.bashrc' (или ~/.zshrc при использовании zsh) для применения всех изменений."
+log_info "Docker Compose файлы рекомендуется размещать в директории /opt/docker-compose"

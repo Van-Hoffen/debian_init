@@ -1,6 +1,6 @@
 # Debian Setup Script
 
-Этот репозиторий содержит скрипт для первичной инициализации системы на базе Debian под стандарты пользователя.
+Этот репозиторий содержит скрипт для первичной инициализации системы на базе Debian под стандарты системного администратора и DevOps специалиста.
 
 ## Содержание
 
@@ -11,27 +11,36 @@
 ## Что делает скрипт
 
 1. Обновляет систему
-2. Устанавливает базовые пакеты:
-   - curl, wget
-   - git, vim, tmux
+2. Устанавливает базовые пакеты для системного администрирования и DevOps:
+   - sudo, curl, wget
+   - ncdu, mc, lm-sensors, strace
+   - htop, nload
+   - tmux
+   - docker.io, docker-compose
+   - zabbix-agent
+   - git, fzf
+   - apt-transport-https, ca-certificates, gnupg, lsb-release
+   - unzip, zip
    - build-essential
    - zsh
-   - htop, tree
-   - unzip, zip
-   - mc, neofetch
-   - software-properties-common
-   - apt-transport-https, ca-certificates, gnupg, lsb-release
 
 3. Копирует пользовательские настройки:
    - bashrc
    - tmux.conf
 
-4. Устанавливает и настраивает zsh:
-   - Устанавливает oh-my-zsh
-   - Устанавливает тему powerlevel10k
-   - Устанавливает плагины zsh-syntax-highlighting и zsh-autosuggestions
+4. Предоставляет выбор оболочки (zsh или bash):
+   - При выборе zsh:
+     * Устанавливает oh-my-zsh
+     * Устанавливает тему powerlevel10k
+     * Устанавливает плагины zsh-syntax-highlighting и zsh-autosuggestions
+   - При выборе bash: пропускает установку zsh
 
-5. Добавляет полезные алиасы в ~/.bash_aliases
+5. Добавляет полезные алиасы в ~/.bash_aliases:
+   - Для управления пакетами (update, install, remove и др.)
+   - Для работы с архивами (untar, zipf)
+   - Для системного администрирования (top, df, du, free и др.)
+   - Для работы с Docker и Docker Compose (dps, di, dc, dcp и др.)
+   - Для работы с Git (gs, ga, gc, gp и др.)
 
 6. Устанавливает fzf (fuzzy finder)
 
@@ -41,14 +50,15 @@
    - ~/Downloads
    - ~/Temp
    - ~/Scripts
+   - /opt/docker-compose (для размещения файлов docker-compose.yaml)
 
-8. Настраивает Git (запрашивает имя и email)
+8. Настраивает Git (запрашивает имя и email, использует mc как редактор)
 
 9. Устанавливает nvm и Node.js
 
 10. Устанавливает Python инструменты
 
-11. Устанавливает Docker
+11. Добавляет текущего пользователя в группу docker
 
 ## Использование
 
