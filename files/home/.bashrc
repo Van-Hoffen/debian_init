@@ -1,10 +1,21 @@
 # ~/.bashrc — выполняется bash для интерактивных не-login оболочек.
-# ALT Linux специфика: глобальный конфиг в /etc/bashrc, а не /etc/bash.bashrc
+#
+# Файл устанавливается проектом debian_init (files/home/.bashrc) в /root,
+# /etc/skel и (по запросу) в домашние каталоги пользователей. При повторной
+# установке отличающаяся версия сохраняется как ~/.bashrc.~N~.
+#
+# ЛИЧНЫЕ НАСТРОЙКИ держите не здесь, а в файлах, которые установщик не трогает:
+#   ~/.user_aliases  — свои алиасы (подключается в разделе 7)
+#   ~/.bashrc.local  — любые свои настройки (подключается в конце, раздел 11)
+#
+# Зависимости: /etc/bash/.bash_aliases, /etc/bash/.bash_welcome (ставит
+# install.sh), пакеты tmux, bash-completion, fastfetch (необязательно).
 
 # ──────────────────────────────────────────────
-# 1. ПОДКЛЮЧЕНИЕ ГЛОБАЛЬНОГО /etc/bashrc (ALT Linux)
+# 1. ПОДКЛЮЧЕНИЕ ГЛОБАЛЬНОГО /etc/bashrc
 # ──────────────────────────────────────────────
-# В ALT Linux глобальные настройки находятся в /etc/bashrc
+# В Debian общий файл /etc/bash.bashrc bash подключает сам.
+# /etc/bashrc существует в ALT Linux / RHEL — подключаем, если есть.
 if [ -r /etc/bashrc ]; then
     . /etc/bashrc
 fi
@@ -24,9 +35,11 @@ HISTCONTROL=ignoreboth
 # Дописывать в файл истории, не перезаписывать
 shopt -s histappend
 
-# Размер истории (в памяти и на диске)
+# Размер истории (в памяти и на диске).
+# HISTFILESIZE не должен быть меньше HISTSIZE, иначе на диск попадёт меньше,
+# чем хранится в памяти (раньше было 6000 при 10000 в памяти).
 HISTSIZE=10000
-HISTFILESIZE=6000
+HISTFILESIZE=10000
 
 # Временная метка для каждой команды в истории
 HISTTIMEFORMAT='[%F_%T] '
@@ -46,7 +59,8 @@ shopt -s globstar
 # Исправление опечаток при cd (cd /Etc → cd /etc)
 shopt -s cdspell
 
-# Регистронезависимый glob
+# Регистронезависимый glob.
+# Внимание: rm *.log удалит и *.LOG — на сервере это стоит помнить.
 shopt -s nocaseglob
 
 # ──────────────────────────────────────────────
@@ -160,9 +174,8 @@ fi
 # ──────────────────────────────────────────────
 # 8. АВТОДОПОЛНЕНИЕ (BASH-COMPLETION)
 # ──────────────────────────────────────────────
-# ALT Linux: completion может находиться в /etc/bash_completion.d/
-# или подключаться через /etc/bashrc автоматически.
-# Проверяем стандартные пути на случай ручной установки.
+# Debian: пакет bash-completion (ставится install.sh).
+# Если completion уже подключён глобально — повторное подключение безвредно.
 if ! shopt -oq posix; then
     if [ -f /usr/share/bash-completion/bash_completion ]; then
         . /usr/share/bash-completion/bash_completion
@@ -201,22 +214,25 @@ tmux_run() {
         # Сессия есть — подключиться
         command tmux attach-session -t "$me"
     else
-        # Новая сессия — создать, показать welcome, подключить
-        command tmux new-session -d -s "$me"
-        # Установить переменную флага для новой сессии
-        command tmux setenv -t "$me" TMUX_NEW_SESSION 1
+        # Новая сессия — создать с флагом TMUX_NEW_SESSION (по нему секция 10
+        # покажет welcome один раз) и подключиться.
+        # Флаг задаётся сразу при создании (-e, tmux >= 3.2): раньше setenv
+        # выполнялся после старта оболочки и мог не успеть (гонка).
+        command tmux new-session -d -s "$me" -e TMUX_NEW_SESSION=1
         command tmux attach-session -t "$me"
     fi
 }
 alias tmux='tmux_run'
 
-# Автозапуск при SSH и ttyS0 — используем ту же функцию
-if [[ -z "$TMUX" && -n "$SSH_TTY" ]]; then
-    tmux_run
-fi
-
-if [[ -z "$TMUX" && "$(tty)" == "/dev/ttyS0" ]]; then
-    tmux_run
+# Автозапуск при SSH и ttyS0 — используем ту же функцию.
+# Проверяем наличие tmux, чтобы не печатать ошибку при каждом входе.
+# _TMUX_AUTOSTARTED нужен секции 10: после выхода/detach из tmux внешняя
+# оболочка не должна повторно показывать welcome screen.
+if [[ -z "$TMUX" ]] && command -v tmux >/dev/null 2>&1; then
+    if [[ -n "$SSH_TTY" || "$(tty)" == "/dev/ttyS0" ]]; then
+        _TMUX_AUTOSTARTED=1
+        tmux_run
+    fi
 fi
 
 # ──────────────────────────────────────────────
@@ -224,7 +240,7 @@ fi
 # ──────────────────────────────────────────────
 if [[ $- == *i* ]]; then
     if [[ -n "$TMUX" ]]; then
-        # Внутри tmux  показать только если новая сессия
+        # Внутри tmux — показать только если новая сессия
         _tmux_new=$(tmux showenv TMUX_NEW_SESSION 2>/dev/null | grep -v '^-')
         if [[ -n "$_tmux_new" ]]; then
             # Сбросить флаг и показать welcome
@@ -237,8 +253,8 @@ if [[ $- == *i* ]]; then
                 fastfetch
             fi
         fi
-    elif [[ -z "$TMUX" ]]; then
-        # Вне tmux  показать сразу
+    elif [[ -z "$TMUX" && -z "$_TMUX_AUTOSTARTED" ]]; then
+        # Вне tmux (и tmux не запускался автоматически) — показать сразу
         if [ -f /etc/bash/.bash_welcome ]; then
             . /etc/bash/.bash_welcome
             welcome_screen
@@ -246,4 +262,14 @@ if [[ $- == *i* ]]; then
             fastfetch
         fi
     fi
+fi
+unset _TMUX_AUTOSTARTED
+
+# ──────────────────────────────────────────────
+# 11. ЛИЧНЫЕ НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ
+# ──────────────────────────────────────────────
+# ~/.bashrc.local не создаётся и не перезаписывается установщиком —
+# всё, что нужно только вам, добавляйте туда.
+if [ -f ~/.bashrc.local ]; then
+    . ~/.bashrc.local
 fi
