@@ -1,0 +1,351 @@
+# /etc/bash/.bash_welcome
+# Подключается из ~/.bashrc: if [ -f /etc/bash/.bash_welcome ]; then . /etc/bash/.bash_welcome; fi
+# Вызов: welcome_screen
+
+welcome_screen() {
+
+# ── Цвета (из твоего PS1) ──────────────────────────────────────────────────
+R='\e[0;1;38;5;160m'    # Красный
+G='\e[0;1;38;5;112m'    # Зелёный
+Y='\e[0;1;38;5;214m'    # Жёлтый
+B='\e[0;1;38;5;68m'     # Синий
+P='\e[0;1;38;5;105m'    # Фиолетовый
+O='\e[0;1;38;5;202m'    # Оранжевый
+W='\e[0;1m'             # Белый жирный
+D='\e[0;2m'             # Серый
+N='\e[0m'               # Сброс
+
+# ── Список сервисов-кандидатов (редактируй под себя) ──────────────────────
+# Скрипт покажет только те, что реально установлены в системе
+mapfile -t SERVICES_CHECK < <(
+    sed 's/#.*//; s/[[:space:]]//g; /^$/d' /etc/bash/.services_check
+)
+# ── Вспомогательные функции ───────────────────────────────────────────────
+
+# Прогресс-бар: bar 40 100 → ████████░░░░░░░░ 40%
+make_bar() {
+    local pct=$1 width=20
+    local filled=$(( pct * width / 100 ))
+    local empty=$(( width - filled ))
+    local color
+    if   [ "$pct" -ge 90 ]; then color=$R
+    elif [ "$pct" -ge 70 ]; then color=$Y
+    else color=$G
+    fi
+    local i
+    # Заполненная часть  цветная
+    printf "${color}"
+    for (( i=0; i<filled; i++ )); do printf '█'; done
+    # Пустая часть — серая
+    printf "${D}"
+    for (( i=0; i<empty; i++ )); do printf '░'; done
+    printf "${N} ${color}%3d%%${N}" "$pct"
+}
+# Статус сервиса: ok/fail/unknown
+svc_status() {
+    local svc=$1
+    if systemctl is-active --quiet "$svc" 2>/dev/null; then
+        echo -e "${G}●${N} ${svc}"
+    elif systemctl list-unit-files --quiet "$svc.service" 2>/dev/null | grep -q "$svc"; then
+        echo -e "${R}●${N} ${svc}"
+    fi
+}
+
+# ── ASCII логотип — выбор по IP ────────────────────────────────────────────
+LOGO_DIR=/etc/bash/
+
+# Получаем первый не-loopback IP
+current_ip=$(ip -4 addr show scope global | grep -oP '(?<=inet )\d+\.\d+' | head -1)
+
+case "$current_ip" in
+    10.5*)   logo_file="$LOGO_DIR/.logo2.txt" ;;   # Сеть 10.5.x.x
+    10.52*)  logo_file="$LOGO_DIR/.logo2.txt" ;;   # Сеть 10.52.x.x
+    172.16*) logo_file="$LOGO_DIR/.logo2.txt" ;;   # Домашняя сеть
+    *)       logo_file="$LOGO_DIR/logo1.txt"  ;;   # Всё остальное
+esac
+
+# Fallback если нужный файл не найден — берём default
+[ -f "$logo_file" ] || logo_file="$LOGO_DIR/.logo1.txt"
+
+if [ -f "$logo_file" ]; then
+    echo -e "${B}$(cat "$logo_file")${N}"
+else
+    echo -e "${R}  [ $(hostname) ]${N}"
+fi
+echo -e "${Y}  $(date '+%A, %d %B %Y | %H:%M:%S %Z')${N}"
+echo ""
+
+# ── Разделитель ───────────────────────────────────────────────────────────
+SEP="${D}  $(printf '─%.0s' {1..52})${N}"
+
+# ── 1. Хост / ОС / Kernel / Uptime ───────────────────────────────────────
+echo -e "$SEP"
+hostname_full=$(hostname -f 2>/dev/null || hostname)
+os_name=$(grep -oP '(?<=^NAME=").*(?=")' /etc/os-release 2>/dev/null \
+       || grep -oP '(?<=^NAME=).*' /etc/os-release 2>/dev/null \
+       || echo "ALT Linux")
+os_ver=$(grep -oP '(?<=^VERSION=").*(?=")' /etc/os-release 2>/dev/null \
+      || grep -oP '(?<=^VERSION=).*' /etc/os-release 2>/dev/null \
+      || echo "")
+kernel=$(uname -r)
+uptime_str=$(uptime -p 2>/dev/null | sed 's/up //')
+
+echo -e "  ${W}Хост${N}    ${G}${hostname_full}${N}"
+echo -e "  ${W}ОС${N}      ${G}${os_name} ${os_ver}${N}  ${D}kernel: ${kernel}${N}"
+echo -e "  ${W}Аптайм${N}  ${Y}${uptime_str}${N}"
+
+# ── 2. Сетевые интерфейсы ─────────────────────────────────────────────────
+echo -e "$SEP"
+echo -e "  ${W}Сеть${N}"
+
+local iface_names=() iface_ips=() iface_max=0 current_iface=""
+
+# Regex в переменные — избегаем ошибку парсера bash с пробелами в паттерне
+local re_iface='^[0-9]+:[[:space:]]([^:]+):'
+local re_ip='inet[[:space:]]([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+)'
+
+while IFS= read -r line; do
+    if [[ "$line" =~ $re_iface ]]; then
+        current_iface="${BASH_REMATCH[1]}"
+    elif [[ "$line" =~ $re_ip ]] && [[ "$current_iface" != "lo" ]]; then
+        iface_names+=("$current_iface")
+        iface_ips+=("${BASH_REMATCH[1]}")
+        [ "${#current_iface}" -gt "$iface_max" ] && iface_max="${#current_iface}"
+    fi
+done < <(ip -4 addr show)
+
+local i
+for (( i=0; i<${#iface_names[@]}; i++ )); do
+    printf "    \e[0;1;38;5;68m%-${iface_max}s\e[0m  %s\n" \
+        "${iface_names[$i]}" "${iface_ips[$i]}"
+done
+
+# ── 3. CPU ────────────────────────────────────────────────────────────────
+echo -e "$SEP"
+cpu_model=$(grep -m1 "model name" /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')
+cpu_cores=$(nproc)
+cpu_threads=$(grep -c "processor" /proc/cpuinfo)
+read la1 la5 la15 _ < /proc/loadavg
+
+echo -e "  ${W}CPU${N}     ${D}${cpu_model}${N}"
+echo -e "          ${W}Ядра:${N} ${G}${cpu_cores}C/${cpu_threads}T${N}  ${W}Load:${N} ${Y}${la1}${N}${D}/1м  ${Y}${la5}${D}/5м  ${Y}${la15}${D}/15м${N}"
+
+# ── 4. RAM + SWAP ─────────────────────────────────────────────────────────
+echo -e "$SEP"
+
+# /proc/meminfo  всегда чистые числа в кБ, без суффиксов
+mem_total_kb=$(awk '/^MemTotal:/{print $2}' /proc/meminfo)
+mem_avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)
+mem_used_kb=$(( mem_total_kb - mem_avail_kb ))
+swap_total_kb=$(awk '/^SwapTotal:/{print $2}' /proc/meminfo)
+swap_used_kb=$(awk '/^SwapFree:/{print $2}' /proc/meminfo)
+swap_used_kb=$(( swap_total_kb - swap_used_kb ))
+
+# Проценты
+mem_pct=$(( mem_total_kb > 0 ? mem_used_kb * 100 / mem_total_kb : 0 ))
+swap_pct=$(( swap_total_kb > 0 ? swap_used_kb * 100 / swap_total_kb : 0 ))
+
+# Читаемый вид: конвертируем кБ → МБ или ГБ
+human_kb() {
+    local kb=$1
+    [ "$kb" -eq 0 ] && printf "0M" && return
+    if [ "$kb" -ge 1048576 ]; then
+        # ГБ с одним знаком после запятой без bc
+        local gb_int=$(( kb / 1048576 ))
+        local gb_dec=$(( (kb % 1048576) * 10 / 1048576 ))
+        printf "%d.%dG" "$gb_int" "$gb_dec"
+    elif [ "$kb" -ge 1024 ]; then
+        printf "%dM" "$(( kb / 1024 ))"
+    else
+        printf "%dK" "$kb"
+    fi
+}
+mem_used_h=$(human_kb $mem_used_kb)
+mem_total_h=$(human_kb $mem_total_kb)
+swap_used_h=$(human_kb $swap_used_kb)
+swap_total_h=$(human_kb $swap_total_kb)
+
+
+printf "  ${W}%-6s${N}" "RAM"
+make_bar "$mem_pct"
+printf "  ${D}%s/%s${N}\n" "$mem_used_h" "$mem_total_h"
+
+if [ "${swap_total_kb:-0}" -gt 0 ]; then
+    printf "  ${W}%-6s${N}" "SWAP"
+    make_bar "$swap_pct"
+    printf "  ${D}%s/%s${N}\n" "$swap_used_h" "$swap_total_h"
+fi
+# ── 5. Диски (все реальные разделы автоматически) ─────────────────────────
+echo -e "$SEP"
+echo -e "  ${W}Диски${N}"
+
+LC_ALL=C df -h --output=source,used,size,pcent,target 2>/dev/null \
+    | awk 'NR>1' \
+    | grep -E '^/dev/(sd|vd|hd|nvme|xvd)' \
+    | while read -r src used size pct mnt; do
+        # Обрезать точку монтирования до 18 символов
+        mnt_short="${mnt:0:18}"
+        [ "${#mnt}" -gt 18 ] && mnt_short="${mnt:0:17}…"
+        # Цвет по заполненности
+        pct_num="${pct//%/}"
+        if   [ "$pct_num" -ge 90 ]; then bar_color=$R
+        elif [ "$pct_num" -ge 70 ]; then bar_color=$Y
+        else bar_color=$G
+        fi
+        printf "    ${B}%-12s${N} ${D}→${N} %-18s  ${bar_color}%s${N}/${D}%s${N} ${bar_color}(%s)${N}\n" \
+               "$src" "$mnt_short" "$used" "$size" "$pct"
+done
+
+# ── 6. Сессии и последний логин ───────────────────────────────────────────
+echo -e "$SEP"
+active_sessions=$(who | wc -l)
+last_info=$(last -n 2 "$USER" 2>/dev/null | awk 'NR==2{print $3, $4, $5, $6}')
+# lastb требует root — используем journald как fallback
+failed_logins=$(journalctl _SYSTEMD_UNIT=sshd.service --since="today" 2>/dev/null \
+    | grep -c "Failed password" 2>/dev/null)
+[ -z "$failed_logins" ] && failed_logins="0"
+
+echo -e "  ${W}Сессии${N}  активных: ${Y}${active_sessions}${N}  ${D}|${N}  неудачных входов сегодня: ${R}${failed_logins}${N}"
+echo -e "  ${W}Вход${N}    предыдущий: ${D}${last_info:-нет данных}${N}"
+
+# ── 7. Сервисы в два столбца с динамическим выравниванием ─────────────────
+local svc svc_names=() svc_colors=() max_len=0
+
+for svc in "${SERVICES_CHECK[@]}"; do
+    if systemctl list-unit-files "${svc}.service" 2>/dev/null | grep -q "${svc}"; then
+        svc_names+=("$svc")
+        if systemctl is-active --quiet "${svc}" 2>/dev/null; then
+            svc_colors+=("$G")
+        else
+            svc_colors+=("$R")
+        fi
+        [ "${#svc}" -gt "$max_len" ] && max_len="${#svc}"
+    fi
+done
+
+if [ "${#svc_names[@]}" -gt 0 ]; then
+    echo -e "$SEP"
+    echo -e "  ${W}Сервисы${N}"
+
+    local total=${#svc_names[@]}
+    local half=$(( (total + 1) / 2 ))
+    # Ширина левого столбца: "● " (2) + имя + отступ (4)
+    local col_width=$(( max_len + 6 ))
+    local i
+
+    for (( i=0; i<half; i++ )); do
+        local right_idx=$(( i + half ))
+
+        # Формируем левую ячейку с точным padding по имени
+        local left_pad=$(( col_width - ${#svc_names[$i]} ))
+        local left_spaces
+        printf -v left_spaces '%*s' "$left_pad" ''
+
+        if [ "$right_idx" -lt "$total" ]; then
+            printf "    %b● %s%s%b● %s%b\n" \
+                "${svc_colors[$i]}" "${svc_names[$i]}" "$left_spaces" \
+                "${svc_colors[$right_idx]}" "${svc_names[$right_idx]}" "$N"
+        else
+            printf "    %b● %s%b\n" "${svc_colors[$i]}" "${svc_names[$i]}" "$N"
+        fi
+    done
+    # echo "" # Пустая строка после списка сервисов.
+fi
+
+echo -e "$SEP"   # ← финальная линия всегда выводится
+#echo ""
+# ── 8. Системная почта ────────────────────────────────────────────
+#   1. Disk usage warn...  от: zabbix
+#   2. FAILED: backup-d... от: root
+#   3. apt-listchanges:... от: root
+#   4. Package updates ...  от: cron
+#   5. Job syscheck sta...  от: root
+local mail_file="/var/mail/${USER}"
+if [ -s "$mail_file" ]; then
+    local mail_count
+    mail_count=$(grep -c "^From " "$mail_file" 2>/dev/null || echo 0)
+
+#    echo -e "$SEP"
+    echo -e "  ${W}Почта${N}  ${Y}${mail_count}${N} писем в /var/mail/${USER}"
+#    echo ""
+
+    # Парсим письма в массивы
+    local cur_from="" cur_subj="" cur_date=""
+    declare -a m_from m_subj m_date
+
+    while IFS= read -r line; do
+        case "$line" in
+            From\ *)
+                if [ -n "$cur_from" ]; then
+                    m_from+=("$cur_from")
+                    m_subj+=("$cur_subj")
+                    m_date+=("$cur_date")
+                fi
+                cur_from="${line#From }"
+                cur_subj="(без темы)"
+                cur_date=""
+                ;;
+            Subject:*)
+                cur_subj="${line#Subject: }"
+                ;;
+            Date:*)
+                cur_date="${line#Date: }"
+                ;;
+        esac
+    done < "$mail_file"
+    # Добавить последнее письмо
+    [ -n "$cur_from" ] && m_from+=("$cur_from") && m_subj+=("$cur_subj") && m_date+=("$cur_date")
+
+    local total_m=${#m_from[@]}
+    local start=$(( total_m > 5 ? total_m - 5 : 0 ))
+    local i
+
+    for (( i=start; i<total_m; i++ )); do
+        local num=$(( total_m - i ))
+
+        # Берём до @ если есть, иначе до пробела
+        local from_raw="${m_from[$i]%% *}"
+        local from_short="${from_raw%%@*}"
+        from_short="${from_short:0:20}"
+
+        # Тема: 23 символов + ... если длиннее
+        local subj="${m_subj[$i]}"
+        if [ "${#subj}" -gt 23 ]; then
+            subj="${subj:0:23}..."
+        fi
+
+        printf "  ${D}%2d.${N} ${W}%-21s${N} ${D}от:${N} ${N}%s${N}\n" \
+            "$num" "$subj" "$from_short"
+    done
+
+    echo ""
+    echo -e "  ${D}Читать: mail  │  mutt  │  cat /var/mail/${USER}${N}"
+    echo -e "  ${D}Удалить всё:  cat /dev/null > /var/mail/${USER}${N}"
+fi
+# ── 9. Описание сервера ───────────────────────────────────────────────────
+local INFO_FILE=/etc/bash/.server_info
+
+if [ -f "$INFO_FILE" ]; then
+    local info_text
+    info_text=$(grep -v '^\s*#' "$INFO_FILE" | grep -v '^\s*$')
+
+    if [ -n "$info_text" ]; then
+        #echo "" # Пустая строка перед информацией.
+        #echo -e "$SEP" # Разделительная линия.
+        echo -e "  ${W}Сервер${N}"
+
+        # Кириллица = 2 байта, fold считает байты
+        # 52 символа SEP - 4 отступ = 48 символов
+        # Для кириллицы: 48 * 2 = 96 байт
+        local wrap_width=96
+
+        echo "$info_text" | fold -s -w "$wrap_width" | while IFS= read -r line; do
+            echo -e "    ${D}${line}${N}"
+        done
+    fi
+fi
+echo -e "$SEP"
+#echo ""
+
+
+} # конец функции welcome_screen
