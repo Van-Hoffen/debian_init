@@ -1,3 +1,0 @@
-# Физический сервер (systemd-detect-virt = none)
-lm-sensors          # температуры
-smartmontools       # SMART дисков

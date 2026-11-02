@@ -1,24 +1,8 @@
-# shellcheck shell=bash
-# /etc/bash/.bash_welcome — экран приветствия при входе.
-#
-# Подключается из ~/.bashrc (раздел 10): . /etc/bash/.bash_welcome; welcome_screen
-# Устанавливается debian_init (files/etc/bash/.bash_welcome).
-#
-# Связанные файлы (там же, в /etc/bash/):
-#   .services_check — список отслеживаемых сервисов (перезаписывается установщиком)
-#   .server_info    — описание сервера (заполняется вручную, установщик НЕ трогает)
-#   .logo*.txt      — ASCII-логотипы, выбор по IP (раздел «ASCII логотип»)
-#
-# Зависимости: iproute2, procps, coreutils; last — пакет wtmpdb (Debian 13).
+# /etc/bash/.bash_welcome
+# Подключается из ~/.bashrc: if [ -f /etc/bash/.bash_welcome ]; then . /etc/bash/.bash_welcome; fi
+# Вызов: welcome_screen
 
 welcome_screen() {
-
-# Все переменные локальные — не засоряют интерактивную оболочку пользователя.
-local R G Y B P O W D N SERVICES_CHECK LOGO_DIR current_ip logo_file SEP
-local hostname_full os_name os_ver kernel uptime_str cpu_model cpu_cores cpu_threads
-local la1 la5 la15 mem_total_kb mem_avail_kb mem_used_kb swap_total_kb swap_used_kb
-local mem_pct swap_pct mem_used_h mem_total_h swap_used_h swap_total_h
-local active_sessions last_info failed_logins line
 
 # ── Цвета (из твоего PS1) ──────────────────────────────────────────────────
 R='\e[0;1;38;5;160m'    # Красный
@@ -33,12 +17,9 @@ N='\e[0m'               # Сброс
 
 # ── Список сервисов-кандидатов (редактируй под себя) ──────────────────────
 # Скрипт покажет только те, что реально установлены в системе
-SERVICES_CHECK=()
-if [ -r /etc/bash/.services_check ]; then
-    mapfile -t SERVICES_CHECK < <(
-        sed 's/#.*//; s/[[:space:]]//g; /^$/d' /etc/bash/.services_check
-    )
-fi
+mapfile -t SERVICES_CHECK < <(
+    sed 's/#.*//; s/[[:space:]]//g; /^$/d' /etc/bash/.services_check
+)
 # ── Вспомогательные функции ───────────────────────────────────────────────
 
 # Прогресс-бар: bar 40 100 → ████████░░░░░░░░ 40%
@@ -60,20 +41,25 @@ make_bar() {
     for (( i=0; i<empty; i++ )); do printf '░'; done
     printf "${N} ${color}%3d%%${N}" "$pct"
 }
+# Статус сервиса: ok/fail/unknown
+svc_status() {
+    local svc=$1
+    if systemctl is-active --quiet "$svc" 2>/dev/null; then
+        echo -e "${G}●${N} ${svc}"
+    elif systemctl list-unit-files --quiet "$svc.service" 2>/dev/null | grep -q "$svc"; then
+        echo -e "${R}●${N} ${svc}"
+    fi
+}
 
 # ── ASCII логотип — выбор по IP ────────────────────────────────────────────
-LOGO_DIR=/etc/bash
+LOGO_DIR=/etc/bash/
 
-# Первые два октета первого не-loopback IP: 10.5.1.20 -> "10.5"
+# Получаем первый не-loopback IP
 current_ip=$(ip -4 addr show scope global | grep -oP '(?<=inet )\d+\.\d+' | head -1)
 
-# Точное совпадение двух октетов. Раньше шаблон 10.5* совпадал и с 10.50–10.59,
-# и перекрывал строку 10.52* (она никогда не срабатывала).
 case "$current_ip" in
-    10.5)    logo_file="$LOGO_DIR/.logo2.txt" ;;   # Сеть 10.5.x.x
-    10.52)   logo_file="$LOGO_DIR/.logo2.txt" ;;   # Сеть 10.52.x.x
-    172.16)  logo_file="$LOGO_DIR/.logo2.txt" ;;   # Домашняя сеть
-    *)       logo_file="$LOGO_DIR/.logo1.txt" ;;   # Всё остальное
+    10.5*|172.16*) logo_file="$LOGO_DIR/.logo2.txt" ;;   # Сети 10.5.x.x и 172.16.x.x
+    *)             logo_file="$LOGO_DIR/.logo1.txt" ;;   # Всё остальное
 esac
 
 # Fallback если нужный файл не найден — берём default
@@ -137,7 +123,7 @@ echo -e "$SEP"
 cpu_model=$(grep -m1 "model name" /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')
 cpu_cores=$(nproc)
 cpu_threads=$(grep -c "processor" /proc/cpuinfo)
-read -r la1 la5 la15 _ < /proc/loadavg
+read la1 la5 la15 _ < /proc/loadavg
 
 echo -e "  ${W}CPU${N}     ${D}${cpu_model}${N}"
 echo -e "          ${W}Ядра:${N} ${G}${cpu_cores}C/${cpu_threads}T${N}  ${W}Load:${N} ${Y}${la1}${N}${D}/1м  ${Y}${la5}${D}/5м  ${Y}${la15}${D}/15м${N}"
@@ -172,10 +158,10 @@ human_kb() {
         printf "%dK" "$kb"
     fi
 }
-mem_used_h=$(human_kb "$mem_used_kb")
-mem_total_h=$(human_kb "$mem_total_kb")
-swap_used_h=$(human_kb "$swap_used_kb")
-swap_total_h=$(human_kb "$swap_total_kb")
+mem_used_h=$(human_kb $mem_used_kb)
+mem_total_h=$(human_kb $mem_total_kb)
+swap_used_h=$(human_kb $swap_used_kb)
+swap_total_h=$(human_kb $swap_total_kb)
 
 
 printf "  ${W}%-6s${N}" "RAM"
@@ -191,10 +177,9 @@ fi
 echo -e "$SEP"
 echo -e "  ${W}Диски${N}"
 
-# /dev/mapper — LVM и LUKS (раньше корень на LVM не отображался), md — RAID, mmcblk — SD/eMMC
 LC_ALL=C df -h --output=source,used,size,pcent,target 2>/dev/null \
     | awk 'NR>1' \
-    | grep -E '^/dev/(sd|vd|hd|nvme|xvd|mmcblk|md|mapper/)' \
+    | grep -E '^/dev/(sd|vd|hd|nvme|xvd|mapper/|md)' \
     | while read -r src used size pct mnt; do
         # Обрезать точку монтирования до 18 символов
         mnt_short="${mnt:0:18}"
@@ -212,43 +197,34 @@ done
 # ── 6. Сессии и последний логин ───────────────────────────────────────────
 echo -e "$SEP"
 active_sessions=$(who | wc -l)
-# В Debian 13 last предоставляет пакет wtmpdb (из util-linux команда удалена)
 last_info=$(last -n 2 "$USER" 2>/dev/null | awk 'NR==2{print $3, $4, $5, $6}')
-# lastb требует root — используем journald. В Debian юнит называется
-# ssh.service (sshd.service — в RHEL/ALT); несколько условий по одному
-# полю journalctl объединяет через ИЛИ. Обычный пользователь видит журнал,
-# только если состоит в группе adm или systemd-journal.
-failed_logins=$(journalctl _SYSTEMD_UNIT=ssh.service _SYSTEMD_UNIT=sshd.service \
-    --since="today" 2>/dev/null | grep -c "Failed password")
+# Поддержка ssh.service (Debian/Ubuntu) и sshd.service (ALT/RHEL)
+failed_logins=$(journalctl -u ssh.service -u sshd.service --since="today" 2>/dev/null \
+    | grep -c "Failed password" 2>/dev/null)
 [ -z "$failed_logins" ] && failed_logins="0"
 
 echo -e "  ${W}Сессии${N}  активных: ${Y}${active_sessions}${N}  ${D}|${N}  неудачных входов сегодня: ${R}${failed_logins}${N}"
 echo -e "  ${W}Вход${N}    предыдущий: ${D}${last_info:-нет данных}${N}"
 
-# ── 7. Сервисы в два столбца с динамическим выравниванием ─────────────────
-local svc svc_names=() svc_colors=() max_len=0 state
-local -A installed_units=()
+# ── 7. Сервисы в два столбца с оптимизированной быстрой проверкой ─────────
+local svc svc_names=() svc_colors=() max_len=0
 
-# Один вызов systemctl на все установленные юниты вместо 1–2 вызовов на каждый
-# сервис из списка (~110 сервисов давали заметную задержку при входе).
 if [ "${#SERVICES_CHECK[@]}" -gt 0 ]; then
-    while read -r svc _; do
-        installed_units["${svc%.service}"]=1
-    done < <(systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null)
-    for svc in "${SERVICES_CHECK[@]}"; do
-        [ -n "${installed_units[$svc]:-}" ] && svc_names+=("$svc")
-    done
-fi
+    # Получаем список всех unit-файлов за ОДИН системный вызов
+    local all_unit_files
+    all_unit_files=$(systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{sub(/\.service$/, "", $1); print $1}')
 
-if [ "${#svc_names[@]}" -gt 0 ]; then
-    # Состояния — одним вызовом, по строке на сервис в том же порядке
-    local i=0
-    while read -r state; do
-        if [ "$state" = active ]; then svc_colors+=("$G"); else svc_colors+=("$R"); fi
-        svc="${svc_names[$i]}"
-        [ "${#svc}" -gt "$max_len" ] && max_len="${#svc}"
-        i=$(( i + 1 ))
-    done < <(systemctl is-active "${svc_names[@]/%/.service}" 2>/dev/null)
+    for svc in "${SERVICES_CHECK[@]}"; do
+        if echo "$all_unit_files" | grep -Fqx "$svc"; then
+            svc_names+=("$svc")
+            if systemctl is-active --quiet "${svc}" 2>/dev/null; then
+                svc_colors+=("$G")
+            else
+                svc_colors+=("$R")
+            fi
+            [ "${#svc}" -gt "$max_len" ] && max_len="${#svc}"
+        fi
+    done
 fi
 
 if [ "${#svc_names[@]}" -gt 0 ]; then
@@ -291,24 +267,19 @@ echo -e "$SEP"   # ← финальная линия всегда выводит
 local mail_file="/var/mail/${USER}"
 if [ -s "$mail_file" ]; then
     local mail_count
-    mail_count=$(grep -c "^From " "$mail_file" 2>/dev/null)   # grep -c сам печатает 0
-    mail_count=${mail_count:-0}
+    mail_count=$(grep -c "^From " "$mail_file" 2>/dev/null || echo 0)
 
 #    echo -e "$SEP"
     echo -e "  ${W}Почта${N}  ${Y}${mail_count}${N} писем в /var/mail/${USER}"
 #    echo ""
 
     # Парсим письма в массивы
-    local cur_from="" cur_subj="" cur_date="" in_headers=0
-    local -a m_from=() m_subj=() m_date=()
+    local cur_from="" cur_subj="" cur_date=""
+    declare -a m_from m_subj m_date
 
-    # Subject:/Date: берём только из заголовков (до первой пустой строки),
-    # иначе строки «Subject:» из тела письма подменяли тему.
     while IFS= read -r line; do
-        [ -z "$line" ] && in_headers=0
         case "$line" in
             From\ *)
-                in_headers=1
                 if [ -n "$cur_from" ]; then
                     m_from+=("$cur_from")
                     m_subj+=("$cur_subj")
@@ -319,10 +290,10 @@ if [ -s "$mail_file" ]; then
                 cur_date=""
                 ;;
             Subject:*)
-                [ "$in_headers" -eq 1 ] && cur_subj="${line#Subject: }"
+                cur_subj="${line#Subject: }"
                 ;;
             Date:*)
-                [ "$in_headers" -eq 1 ] && cur_date="${line#Date: }"
+                cur_date="${line#Date: }"
                 ;;
         esac
     done < "$mail_file"
@@ -367,32 +338,18 @@ if [ -f "$INFO_FILE" ]; then
         #echo -e "$SEP" # Разделительная линия.
         echo -e "  ${W}Сервер${N}"
 
-        # Перенос по словам до 48 СИМВОЛОВ (52 символа SEP - 4 отступ).
-        # fold считает байты, и смешанный латиница/кириллица текст переносился
-        # неровно; bash в UTF-8 локали считает именно символы.
-        local wrap_width=48 word cur words
-        while IFS= read -r line; do
-            cur=""
-            read -r -a words <<< "$line"     # без glob-подстановки (в отличие от for in $line)
-            for word in "${words[@]}"; do
-                if [ -z "$cur" ]; then
-                    cur="$word"
-                elif [ $(( ${#cur} + 1 + ${#word} )) -le "$wrap_width" ]; then
-                    cur="$cur $word"
-                else
-                    echo -e "    ${D}${cur}${N}"
-                    cur="$word"
-                fi
-            done
-            [ -n "$cur" ] && echo -e "    ${D}${cur}${N}"
-        done <<< "$info_text"
+        # Кириллица = 2 байта, fold считает байты
+        # 52 символа SEP - 4 отступ = 48 символов
+        # Для кириллицы: 48 * 2 = 96 байт
+        local wrap_width=96
+
+        echo "$info_text" | fold -s -w "$wrap_width" | while IFS= read -r line; do
+            echo -e "    ${D}${line}${N}"
+        done
     fi
 fi
 echo -e "$SEP"
 #echo ""
 
-
-# Вспомогательные функции объявлены глобально — убираем их после вывода
-unset -f make_bar human_kb
 
 } # конец функции welcome_screen
