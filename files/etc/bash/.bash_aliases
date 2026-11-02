@@ -1,6 +1,12 @@
-# ~/.bash_aliases
-# Подключается автоматически из ~/.bashrc
-# Все пользовательские псевдонимы и функции хранятся здесь.
+# shellcheck shell=bash
+# /etc/bash/.bash_aliases — общие алиасы и функции для всех пользователей.
+#
+# Подключается из ~/.bashrc (раздел 7). Устанавливается debian_init
+# (files/etc/bash/.bash_aliases) и перезаписывается при обновлении —
+# не правьте его на сервере.
+#
+# Свои алиасы добавляйте в ~/.user_aliases (подключается после этого файла
+# и перекрывает совпадающие имена). Отредактировать и применить: ebal
 
 # ── Навигация ──────────────────────────────────────────────────────────────
 alias ..='cd ..'                        # Перейти на уровень вверх
@@ -21,8 +27,11 @@ alias duh='du -sh *'                    # Размер всего содержи
 alias cx='chmod +x'                     # Сделать файл исполняемым
 
 # ── Система и процессы ─────────────────────────────────────────────────────
-alias ps='ps aux'                       # Показать все запущенные процессы
-alias psg='ps aux | grep'               # Найти процесс по имени: psg nginx
+# ps без аргументов = ps aux. С аргументами — обычный ps (раньше алиас
+# 'ps aux' ломал ps -ef / ps -o ...: «ps aux -ef» завершается ошибкой).
+unalias ps 2>/dev/null   # на случай повторного source после старой версии с alias ps
+ps() { if [ "$#" -eq 0 ]; then command ps aux; else command ps "$@"; fi; }
+alias psg='command ps aux | grep'       # Найти процесс по имени: psg nginx
 alias top='top -d 1'                    # Мониторинг процессов, обновление 1 сек
 alias free='free -h'                    # Оперативная память в читаемом виде
 alias ports='ss -tulnp'                 # Показать все открытые порты
@@ -37,28 +46,27 @@ else
     alias poweroff='sudo poweroff'      # Выключить сервер
 fi
 
-# ── Обновление системы ALT Linux ───────────────────────────────────────────
-# ALT p9 и старше (apt-get):
-alias update='sudo apt-get update && sudo apt-get upgrade -y'
-alias apt='apt-get'
-# ALT p10+ (dnf):
-#if [ "$(id -u)" -eq 0 ]; then
-    # ROOT  без SUDO
-#    alias update='apt-get update -y'      # Обновить все пакеты системы
-#else
-    # USER — SUDOfi
-#    alias update='sudo apt-get update -y'      # Обновить все пакеты системы
-#fi
+# ── Обновление системы (Debian) ───────────────────────────────────────────
+# Алиас apt='apt-get' (наследие ALT Linux) удалён: в Debian он ломал
+# apt search / apt list --upgradable / apt show — в apt-get этих команд нет.
+if [ "$(id -u)" -eq 0 ]; then
+    # ROOT  без SUDO (на netinst sudo может отсутствовать)
+    alias update='apt-get update && apt-get upgrade -y'        # Обновить все пакеты системы
+else
+    # USER  SUDO
+    alias update='sudo apt-get update && sudo apt-get upgrade -y'   # Обновить все пакеты системы
+fi
 
 # ── Редактирование конфигов ────────────────────────────────────────────────
 alias ebrc='${EDITOR:-nano} ~/.bashrc && source ~/.bashrc'      # Редактировать .bashrc и сразу применить
-alias ebal='${EDITOR:-nano} ~/.bash_aliases && source ~/.bash_aliases'  # Редактировать алиасы и применить
+alias ebal='${EDITOR:-nano} ~/.user_aliases && source ~/.user_aliases'  # Редактировать СВОИ алиасы (~/.user_aliases) и применить
+alias ebl='${EDITOR:-nano} ~/.bashrc.local && source ~/.bashrc.local'   # Редактировать свои настройки (~/.bashrc.local) и применить
 alias sbrc='source ~/.bashrc'                                   # Применить .bashrc без перезахода
 if [ "$(id -u)" -eq 0 ]; then
     # ROOT  без SUDO
     alias hosts='${EDITOR:-nano} /etc/hosts'                   # Редактировать файл hosts
 else
-    # USER — SUDOfi
+    # USER  SUDO
     alias hosts='sudo ${EDITOR:-nano} /etc/hosts'                   # Редактировать файл hosts
 fi
 
@@ -85,7 +93,8 @@ alias path='echo $PATH | tr ":" "\n"'  # Показать PATH каждый эл
 alias now='date +"%T %d-%m-%Y"'        # Текущая дата и время: ЧЧ:ММ:СС ДД-ММ-ГГГГ
 alias week='date +%V'                  # Номер текущей недели в году
 alias mnt='mount | column -t | grep ^/dev/'   # Показать смонтированные разделы
-alias disk='du -aBM 2>/dev/null | sort -nr | head -n 30'  # Топ 30 самых тяжёлых файлов
+# command du — без подстановки алиаса du='du -h' (иначе «du -h -aBM» теряет суффикс M)
+alias disk='command du -aBM 2>/dev/null | sort -nr | head -n 30'  # Топ 30 самых тяжёлых файлов и папок
 
 # ── Функции ────────────────────────────────────────────────────────────────
 
@@ -104,11 +113,13 @@ extract() {
         *.tar.gz)   tar xzf "$1"            ;;  # TAR + GZIP
         *.tar.xz)   tar xJf "$1"            ;;  # TAR + XZ
         *.tar.zst)  tar --zstd -xf "$1"     ;;  # TAR + ZSTD
+        *.tgz)      tar xzf "$1"            ;;  # TAR + GZIP (короткое имя)
+        *.tar)      tar xf "$1"             ;;  # TAR без сжатия
         *.zip)      unzip "$1"              ;;  # ZIP архив
-        *.7z)       7z x "$1"               ;;  # 7-Zip архив
+        *.7z)       7z x "$1"               ;;  # 7-Zip архив (пакет 7zip)
         *.gz)       gunzip "$1"             ;;  # Одиночный GZIP
         *.bz2)      bunzip2 "$1"            ;;  # Одиночный BZIP2
-        *.rar)      unrar x "$1"            ;;  # RAR архив
+        *.rar)      unrar x "$1"            ;;  # RAR архив (пакет unrar, non-free)
         *.xz)       xz -d "$1"             ;;  # Одиночный XZ
         *)          echo "Не знаю как распаковать '$1'" ;;
     esac
@@ -117,7 +128,7 @@ extract() {
 # mkcd — создать директорию и сразу войти в неё
 # пример 
 # 'mkcd /tmp/projects/myapp/config'
-mkcd() { mkdir -p "$1" && cd "$1"; }
+mkcd() { mkdir -p "$1" && cd "$1" || return; }
 
 ## Файлы и архивы
 # Создать бэкап файла с датой: bak nginx.conf → nginx.conf.2026-04-28.bak 
@@ -140,8 +151,8 @@ dlx() { wget -qO- "$1" | tar xzf -; }
 memtop() { ps aux --sort=-%mem | head -n 11; } 
 # Показать топ 10 процессов по CPU 
 cputop() { ps aux --sort=-%cpu | head -n 11; } 
-# Сколько дней работает сервер — красиво 
-uptime() { /usr/bin/uptime -p; } 
+# Сколько дней работает сервер — красиво. С аргументами — обычный uptime (uptime -s и т.п.)
+uptime() { if [ "$#" -eq 0 ]; then command uptime -p; else command uptime "$@"; fi; }
 # Показать содержимое PATH каждый элемент с новой строки и номером 
 pathlist() { echo "$PATH" | tr ':' '\n' | nl; }
 
