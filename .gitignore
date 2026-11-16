@@ -44,6 +44,9 @@ coverage/
 htmlcov/
 .coverage
 
+# Test artifacts
+tests/.artifacts/
+
 # Compressed files
 *.zip
 *.gz

@@ -201,7 +201,12 @@ want_step() {
 export DRY_RUN ASSUME_YES ALLOW_REMOVE BACKUP_DIR SYSTEMD_RUNNING
 
 # Один экземпляр одновременно
-exec 9> /run/debian_init.lock 2>/dev/null || exec 9> /tmp/debian_init.lock
+# Нельзя делать `exec 9> /run/... 2>/dev/null`: при успехе stderr остаётся
+# перенаправленным в /dev/null до конца скрипта, и все log_warn/log_error
+# теряются. Сначала проверяем каталог, потом открываем файл.
+LOCK_FILE=/run/debian_init.lock
+[[ -w /run ]] || LOCK_FILE=/tmp/debian_init.lock
+exec 9> "$LOCK_FILE"
 flock -n 9 || die "install.sh уже выполняется"
 
 # Лог: весь вывод дублируется в $LOG_FILE

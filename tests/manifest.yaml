@@ -1,0 +1,251 @@
+version: 1
+project: debian_init
+updated: "2026-11-16"
+levels:
+  - static
+  - unit
+  - cli
+  - integration
+  - slow
+  - vm
+
+claims:
+  - id: STAT-001
+    area: static
+    claim: "Все bash-скрипты синтаксически корректны"
+    level: static
+    env: host
+    test: tests/static/test_syntax.sh
+    status: active
+
+  - id: STAT-002
+    area: static
+    claim: "ShellCheck не находит ошибок"
+    level: static
+    env: docker
+    test: tests/static/test_shellcheck.sh
+    status: active
+
+  - id: STAT-003
+    area: contract
+    claim: "--help и --list-steps соответствуют снапшотам"
+    level: static
+    env: host
+    test: tests/static/test_snapshots.sh
+    status: active
+
+  - id: STAT-004
+    area: docs
+    claim: "Относительные ссылки в Markdown ведут на существующие файлы"
+    level: static
+    env: host
+    test: tests/static/test_docs_links.sh
+    status: active
+
+  - id: UNIT-001
+    area: common
+    claim: "valid_hostname, read_list и sed_escape_* работают по контракту"
+    level: unit
+    env: host
+    test: tests/unit/test_common.sh
+    status: active
+
+  - id: UNIT-002
+    area: apt
+    claim: "ensure_pkgs ставит пакеты с --no-remove"
+    level: unit
+    env: host
+    test: tests/unit/test_common.sh
+    status: active
+
+  - id: UNIT-003
+    area: apt
+    claim: "ensure_pkgs не удаляет пакеты, при сбое повторяет по одному и вызывает dpkg --configure -a"
+    level: unit
+    env: host
+    test: tests/unit/test_common.sh
+    status: active
+
+  - id: UNIT-004
+    area: apt
+    claim: "ensure_pkgs пропускает отсутствующие пакеты и уважает --allow-remove"
+    level: unit
+    env: host
+    test: tests/unit/test_common.sh
+    status: active
+
+  - id: INT-012
+    area: files
+    claim: "install_system_file идемпотентен, делает бэкап, поддерживает keep и dry-run"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_files.sh
+    status: active
+
+  - id: UNIT-005
+    area: run
+    claim: "run в dry-run не выполняет команду, а ошибки возвращает"
+    level: unit
+    env: host
+    test: tests/unit/test_common.sh
+    status: active
+
+  - id: CLI-001
+    area: cli
+    claim: "--help и --list-steps работают, обязательные флаги присутствуют"
+    level: cli
+    env: docker
+    test: tests/cli/test_cli.sh
+    status: active
+
+  - id: CLI-002
+    area: cli
+    claim: "Неизвестный флаг/режим/шаг, нехватка аргумента и недопустимый hostname отклоняются"
+    level: cli
+    env: docker
+    test: tests/cli/test_cli.sh
+    status: active
+
+  - id: CLI-003
+    area: cli
+    claim: "Второй экземпляр install.sh блокируется flock"
+    level: cli
+    env: docker
+    test: tests/cli/test_lock.sh
+    status: active
+
+  - id: INT-001
+    area: preflight
+    claim: "preflight определяет ОС/платформу, отключает cdrom и создаёт debian.sources"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_preflight.sh
+    status: active
+
+  - id: INT-002
+    area: upgrade
+    claim: "existing не делает autoremove, fresh делает; reboot-required учитывается"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_upgrade.sh
+    status: active
+
+  - id: INT-003
+    area: files
+    claim: "system-files/dotfiles раскладывают файлы, сохраняют .server_info, делают бэкапы и пропускают symlink"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_files.sh
+    status: active
+
+  - id: INT-004
+    area: users
+    claim: "users обновляет dotfiles только подходящим пользователям, с правильным владельцем и бэкапом"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_users.sh
+    status: active
+
+  - id: INT-005
+    area: hostname
+    claim: "hostname меняет /etc/hostname, 127.0.1.1 и /etc/mailname, повторный запуск идемпотентен"
+    level: integration
+    env: docker-privileged
+    test: tests/integration/test_hostname.sh
+    status: active
+
+  - id: INT-006
+    area: hostname
+    claim: "Недопустимое имя компьютера отклоняется"
+    level: integration
+    env: docker-privileged
+    test: tests/integration/test_hostname.sh
+    status: active
+
+  - id: INT-007
+    area: identity
+    claim: "identity создаёт новый machine-id и SSH host keys"
+    level: integration
+    env: docker-systemd
+    test: tests/integration/test_identity.sh
+    status: active
+
+  - id: INT-008
+    area: zabbix
+    claim: "zabbix меняет Server/ServerActive/Hostname и пропускает шаг без пакета"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_zabbix.sh
+    status: active
+
+  - id: INT-009
+    area: lvm
+    claim: "Без lvm2 шаг lvm пропускается без изменений"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_lvm.sh
+    status: active
+
+  - id: INT-010
+    area: extras
+    claim: "dirs/sshperms работают, append_local_once не создаёт дублей"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_extras.sh
+    status: active
+
+  - id: INT-011
+    area: dry-run
+    claim: "Полный --dry-run не меняет файловую систему"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_dry_run.sh
+    status: active
+
+  - id: INT-013
+    area: modes
+    claim: "Режимы fresh/template/existing, --platform, --only и --skip выбирают заявленные шаги"
+    level: integration
+    env: docker-debian13
+    test: tests/integration/test_modes.sh
+    status: active
+
+  - id: SLOW-001
+    area: full
+    claim: "Полный --mode fresh -y устанавливает пакеты и раскладывает файлы"
+    level: slow
+    env: docker-debian13-network
+    test: tests/slow/test_full_install.sh
+    status: active
+
+  - id: VM-001
+    area: hostname
+    claim: "Реальный hostnamectl на systemd"
+    level: vm
+    env: qemu-kvm
+    test: ""
+    status: planned
+
+  - id: VM-002
+    area: lvm
+    claim: "vgrename корневой VG, обновление fstab/crypttab/initramfs/GRUB"
+    level: vm
+    env: qemu-kvm
+    test: ""
+    status: planned
+
+  - id: VM-003
+    area: reboot
+    claim: "Система загружается после переименования VG"
+    level: vm
+    env: qemu-kvm
+    test: ""
+    status: planned
+
+  - id: VM-004
+    area: identity
+    claim: "SSH host keys работают после перезагрузки"
+    level: vm
+    env: qemu-kvm
+    test: ""
+    status: planned

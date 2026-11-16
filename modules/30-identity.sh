@@ -110,7 +110,11 @@ step_identity() {
         local k
         for k in /etc/ssh/ssh_host_*; do [[ -e "$k" ]] && backup_system_file "$k"; done
         run rm -f /etc/ssh/ssh_host_*
-        run env DEBIAN_FRONTEND=noninteractive dpkg-reconfigure -f noninteractive openssh-server
+        if command -v ssh-keygen >/dev/null; then
+            run ssh-keygen -A
+        else
+            run env DEBIAN_FRONTEND=noninteractive dpkg-reconfigure -f noninteractive openssh-server
+        fi
         if [[ "$SYSTEMD_RUNNING" == true ]]; then
             run systemctl try-restart ssh.service || true
         fi

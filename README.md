@@ -130,10 +130,25 @@ dotfiles существующим пользователям и на `autoremove
 ## Документация
 
 - [Использование: шаги, пакеты, диагностика, extras, LVM](docs/usage.md).
+- [План тестирования и матрица покрытия](docs/test-plan.md).
 - [Разработка и проверка](docs/usage.md#разработка-и-проверка).
 - [Шпаргалка по tmux](docs/readme_tmux.md).
 - `./install.sh --help` — все параметры.
 - `./install.sh --list-steps` — список шагов.
+
+## Тестирование
+
+```bash
+tests/run.sh                  # static + unit + cli + integration
+tests/run.sh --tier unit      # только unit
+tests/run.sh --tier slow      # полный прогон с пакетами, нужна сеть
+tests/run.sh --list           # список тестов
+```
+
+Требуется Docker. Тесты идут в одноразовых контейнерах, репозиторий монтируется
+только на чтение. Требования и матрица покрытия — в
+[docs/test-plan.md](docs/test-plan.md), machine-readable список —
+`tests/manifest.yaml`.
 
 ## Структура
 
@@ -148,7 +163,9 @@ packages/*.list        списки пакетов
 files/etc/bash/        системные файлы bash → /etc/bash
 files/home/            .bashrc, .tmux.conf → домашние каталоги
 docs/usage.md          шаги, пакеты, диагностика, extras, LVM
+docs/test-plan.md      план тестирования и матрица покрытия
 docs/readme_tmux.md    документация по tmux
+tests/                 агентские тесты (см. docs/test-plan.md)
 ```
 
 ## Ограничения

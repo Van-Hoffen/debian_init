@@ -180,10 +180,15 @@ cat /var/run/reboot-required.pkgs 2>/dev/null || true
 ## Разработка и проверка
 
 ```bash
-bash -n install.sh lib/common.sh modules/*.sh
-shellcheck -x install.sh lib/*.sh modules/*.sh
-./install.sh --dry-run --mode fresh
+tests/run.sh                 # static + unit + cli + integration
+tests/run.sh --tier slow     # полный прогон с пакетами, нужна сеть
+tests/run.sh --list
 ```
 
-Автотестов в репозитории пока нет. Изменения, затрагивающие LVM, SSH host keys
-или источники APT, проверяйте на тестовой ВМ (для LVM — на снапшоте).
+Тесты идут в одноразовых Docker-контейнерах; репозиторий монтируется только на
+чтение. План и матрица покрытия — в [test-plan.md](test-plan.md), список
+утверждений — `tests/manifest.yaml`. Статические проверки (`bash -n`,
+shellcheck, снапшоты `--help`) входят в `tests/run.sh`.
+
+Автотестов, требующих реальной VM (LVM/GRUB/перезагрузка), пока нет — они
+запланированы в `docs/test-plan.md` (VM-001…VM-004).

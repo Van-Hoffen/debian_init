@@ -1,0 +1,47 @@
+Использование: ./install.sh [--mode fresh|template|existing] [параметры]
+
+Режимы:
+  --mode fresh        Новая система: настройки, обновление, пакеты.
+                      Имя/VG меняются только если заданы --hostname/--rename-vg.
+  --mode template     Клон шаблона: + вопросы про имя, VG, machine-id/SSH-ключи.
+  --mode existing     Рабочая машина: + .bashrc/.tmux.conf всем пользователям.
+  Без --mode в терминале будет показано меню.
+
+Имя компьютера и LVM:
+  --hostname NAME     Новое имя компьютера.
+  --rename-vg         Переименовать VG корня в "<hostname>-vg".
+  --no-rename-vg      Не переименовывать VG (и не спрашивать).
+  --vg-name NAME      Явное имя VG вместо "<hostname>-vg".
+  --reset-identity    Новые machine-id и SSH host keys.
+  --no-reset-identity Не трогать machine-id и SSH host keys.
+
+Пользователи:
+  --all-users         Раздать dotfiles всем существующим пользователям.
+  --no-all-users      Не раздавать (только /root и /etc/skel).
+
+Пакеты и компоненты:
+  --platform auto|hw|vm|kvm|microsoft|vmware   Тип машины (по умолчанию auto).
+  --allow-remove             Разрешить apt удалять уже установленные пакеты.
+                             По умолчанию установка, требующая удаления
+                             (например, агента хостера), пропускается.
+  --zabbix-server ADDR       Настроить zabbix-agent2 на этот сервер.
+  --extras LIST|all          Доп. компоненты: gitconfig dirs sshperms fzf python node docker zsh
+  --extras-user USER         Для кого ставить extras (по умолчанию SUDO_USER).
+  --git-name NAME / --git-email EMAIL   Для компонента gitconfig.
+
+Управление выполнением:
+  --only STEP[,STEP]  Выполнить только указанные шаги.
+  --skip STEP[,STEP]  Пропустить шаги.
+  --list-steps        Показать шаги и выйти.
+  -y, --yes           Без вопросов (значения по умолчанию, подтверждения = да).
+  -n, --dry-run       Показать действия, ничего не меняя.
+  -h, --help          Эта справка.
+
+Шаги: preflight upgrade packages system-files dotfiles users hostname identity lvm zabbix extras
+
+Примеры:
+  ./install.sh --mode fresh --hostname srv-web01 --rename-vg -y
+  ./install.sh --mode template
+  ./install.sh --mode existing --dry-run
+  ./install.sh --only hostname,lvm --hostname srv-db02 --rename-vg
+  ./install.sh --only extras --extras docker,node --extras-user ivan

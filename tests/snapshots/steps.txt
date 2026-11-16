@@ -1,0 +1,11 @@
+preflight
+upgrade
+packages
+system-files
+dotfiles
+users
+hostname
+identity
+lvm
+zabbix
+extras
