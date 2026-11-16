@@ -20,10 +20,16 @@ step_preflight() {
     OS_CODENAME="${VERSION_CODENAME:-}"
     log_info "ОС: ${PRETTY_NAME:-$OS_ID} (codename: ${OS_CODENAME:-?})"
 
-    if [[ "$OS_ID" != debian ]]; then
-        add_warning "Проект рассчитан на Debian, обнаружено: $OS_ID. Продолжаем на ваш риск."
-    elif [[ "${OS_VERSION%%.*}" =~ ^[0-9]+$ ]] && (( ${OS_VERSION%%.*} < 12 )); then
-        add_warning "Debian $OS_VERSION старее 12 — проверялось только на 12 и 13."
+    if [[ "$OS_ID" == debian ]]; then
+        if [[ "${OS_VERSION%%.*}" =~ ^[0-9]+$ ]] && (( ${OS_VERSION%%.*} < 12 )); then
+            add_warning "Debian $OS_VERSION старее 12 — проверялось только на 12 и 13."
+        fi
+    elif [[ "$OS_ID" == ubuntu || "$OS_ID" == linuxmint || "$OS_ID" == pop ]]; then
+        # Ubuntu-совместимые: apt/dpkg/systemd те же, отличается набор пакетов —
+        # отсутствующие в репозиториях пропускаются с предупреждением.
+        log_info "Ubuntu-совместимая система (${OS_ID} ${OS_VERSION}): отсутствующие пакеты будут пропущены"
+    else
+        add_warning "Проект рассчитан на Debian/Ubuntu, обнаружено: $OS_ID. Продолжаем на ваш риск."
     fi
 
     # --- Платформа: железо / VM / контейнер -----------------------------------
@@ -36,12 +42,16 @@ step_preflight() {
     log_info "Платформа: $VIRT"
 
     # --- Источники apt ------------------------------------------------------
-    fix_apt_sources
+    if command -v apt-get >/dev/null; then
+        fix_apt_sources
 
-    # --- apt-get update -----------------------------------------------------
-    log_info "Обновление списка пакетов (apt-get update)..."
-    if ! apt_get update; then
-        die "apt-get update завершился с ошибкой. Проверьте сеть и /etc/apt/sources.list*."
+        # --- apt-get update -------------------------------------------------
+        log_info "Обновление списка пакетов (apt-get update)..."
+        if ! apt_get update; then
+            die "apt-get update завершился с ошибкой. Проверьте сеть и /etc/apt/sources.list*."
+        fi
+    else
+        add_warning "apt-get не найден — обновление и установка пакетов будут пропущены"
     fi
 }
 
@@ -98,8 +108,18 @@ EOF
 # -----------------------------------------------------------------------------
 step_upgrade() {
     log_step "Обновление системы"
+    if ! command -v apt-get >/dev/null; then
+        log_info "apt-get не найден — пропуск"
+        return 0
+    fi
     apt_get full-upgrade
-    apt_get autoremove --purge
+    # На используемой машине удалять «лишние» пакеты опасно: за ними могут
+    # стоять сервисы и агенты, поставленные вручную или хостингом.
+    if [[ "$MODE" == existing ]]; then
+        log_info "Режим existing: autoremove не выполняется (может удалить нужные сервисам пакеты)"
+    else
+        apt_get autoremove --purge
+    fi
     [[ -f /var/run/reboot-required ]] && REBOOT_REQUIRED=true
     return 0
 }
@@ -114,6 +134,10 @@ step_upgrade() {
 # -----------------------------------------------------------------------------
 step_packages() {
     log_step "Установка пакетов"
+    if ! command -v apt-get >/dev/null || ! command -v dpkg >/dev/null; then
+        add_warning "apt-get/dpkg не найдены — установка пакетов пропущена (дистрибутив не Debian-совместимый)"
+        return 0
+    fi
     local lists=("$REPO_DIR/packages/base.list") extra=""
     case "$VIRT" in
         none|hw)    extra="hw" ;;

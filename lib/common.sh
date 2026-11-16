@@ -11,6 +11,7 @@
 # --- Глобальное состояние (заполняется install.sh) ---------------------------
 : "${DRY_RUN:=false}"          # true — только показывать действия
 : "${ASSUME_YES:=false}"       # true — не задавать вопросов, брать значения по умолчанию
+: "${ALLOW_REMOVE:=false}"     # true — разрешить apt удалять уже стоящие пакеты
 : "${BACKUP_DIR:=/var/backups/debian_init/$(date +%Y%m%d-%H%M%S)}"
 : "${SYSTEMD_RUNNING:=false}"  # true — система загружена с systemd (не chroot)
 WARNINGS=()                    # предупреждения, выводятся в итоговой сводке
@@ -36,13 +37,20 @@ die()       { log_error "$*"; exit 1; }
 add_warning() { WARNINGS+=("$*"); log_warn "$*"; }
 
 # --- Выполнение команд с учётом --dry-run ------------------------------------
-# run cmd args...  — выполнить команду или (в dry-run) только показать её
+# run cmd args...  — выполнить команду или (в dry-run) только показать её.
+# При ошибке печатает саму команду: в трапе ERR видно только "return"/"$@",
+# что бесполезно для диагностики.
 run() {
     if [[ "$DRY_RUN" == true ]]; then
         log_dry "$*"
         return 0
     fi
-    "$@"
+    local rc=0
+    "$@" || rc=$?
+    if (( rc != 0 )); then
+        log_error "Команда завершилась с кодом $rc: $*"
+        return "$rc"
+    fi
 }
 
 # --- Вопросы пользователю ----------------------------------------------------
@@ -118,8 +126,29 @@ read_list() {
     sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$1"
 }
 
-# ensure_pkgs pkg... — установить недостающие пакеты, отсутствующие в
-# репозиториях пропустить с предупреждением (а не падать целиком).
+# Какие уже установленные пакеты apt удалит при установке указанных
+# (симуляция, ничего не меняется). apt печатает удаление строкой "Remv имя".
+apt_removals() {
+    apt-get -s install "$@" 2>/dev/null | awk '/^Remv / { print $2 }'
+}
+
+# Вернуть dpkg в согласованное состояние после неудачной операции.
+# apt мог успеть распаковать часть пакетов; configure -a безопасен и не
+# удаляет ничего.
+dpkg_repair() {
+    log_warn "Проверяю незавершённые операции dpkg (dpkg --configure -a)..."
+    run env DEBIAN_FRONTEND=noninteractive dpkg --configure -a \
+        || add_warning "dpkg --configure -a завершился с ошибкой — см. вывод выше"
+}
+
+# ensure_pkgs pkg... — установить недостающие пакеты:
+#   * отсутствующие в репозиториях пропускаются с предупреждением;
+#   * по умолчанию apt НЕ разрешается удалять уже установленные пакеты:
+#     на рабочей машине это могут быть агент хостера, рабочие сервисы и т.п.
+#     (на Ubuntu так удалялся beget-agent со сломанным prerm — срывал всю
+#     установку). Разрешить удаление: --allow-remove;
+#   * сбой пакетной установки не фатален: apt повторяет установку по одному
+#     пакету, проблемные попадают в итоговую сводку, остальные ставятся.
 ensure_pkgs() {
     local p to_install=() missing=()
     for p in "$@"; do
@@ -133,9 +162,37 @@ ensure_pkgs() {
     if (( ${#missing[@]} )); then
         add_warning "Пакеты отсутствуют в репозиториях и пропущены: ${missing[*]}"
     fi
-    if (( ${#to_install[@]} )); then
-        log_info "Установка: ${to_install[*]}"
-        apt_get install "${to_install[@]}"
+    (( ${#to_install[@]} )) || return 0
+
+    local opts=()
+    if [[ "$ALLOW_REMOVE" != true ]]; then
+        opts+=(--no-remove)
+        local removals=()
+        mapfile -t removals < <(apt_removals "${to_install[@]}")
+        if (( ${#removals[@]} )); then
+            add_warning "Установка потребовала бы удалить: ${removals[*]} — такие пакеты будут пропущены (разрешить удаление: --allow-remove)"
+        fi
+    fi
+
+    log_info "Установка: ${to_install[*]}"
+    if apt_get install "${opts[@]}" "${to_install[@]}"; then
+        return 0
+    fi
+
+    # Один проблемный пакет (сломанный maintainer-скрипт, конфликт) не должен
+    # срывать установку всех остальных.
+    log_warn "Пакетная установка не удалась — повторяю по одному пакету"
+    dpkg_repair
+
+    local failed=()
+    for p in "${to_install[@]}"; do
+        pkg_installed "$p" && continue
+        log_info "  $p"
+        apt_get install "${opts[@]}" "$p" || failed+=("$p")
+    done
+    if (( ${#failed[@]} )); then
+        add_warning "Не удалось установить: ${failed[*]}"
+        add_warning "Остальные пакеты установлены; причина — в выводе apt и в логе ${LOG_FILE:-/var/log/debian_init.log}"
     fi
 }
 

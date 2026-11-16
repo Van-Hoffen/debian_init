@@ -54,6 +54,9 @@ usage() {
 
 Пакеты и компоненты:
   --platform auto|hw|vm|kvm|microsoft|vmware   Тип машины (по умолчанию auto).
+  --allow-remove             Разрешить apt удалять уже установленные пакеты.
+                             По умолчанию установка, требующая удаления
+                             (например, агента хостера), пропускается.
   --zabbix-server ADDR       Настроить zabbix-agent2 на этот сервер.
   --extras LIST|all          Доп. компоненты: ${EXTRAS_ALL[*]}
   --extras-user USER         Для кого ставить extras (по умолчанию SUDO_USER).
@@ -110,6 +113,7 @@ while [[ $# -gt 0 ]]; do
         --all-users)         DO_USERS=yes ;;
         --no-all-users)      DO_USERS=no ;;
         --platform)          need_arg "$@"; PLATFORM="$2"; shift ;;
+        --allow-remove)      ALLOW_REMOVE=true ;;
         --zabbix-server)     need_arg "$@"; ZABBIX_SERVER="$2"; shift ;;
         --extras)            need_arg "$@"; EXTRAS="$2"; shift ;;
         --extras-user)       need_arg "$@"; EXTRAS_USER="$2"; shift ;;
@@ -194,7 +198,7 @@ want_step() {
 
 # --- Окружение выполнения ---------------------------------------------------
 [[ -d /run/systemd/system ]] && SYSTEMD_RUNNING=true
-export DRY_RUN ASSUME_YES BACKUP_DIR SYSTEMD_RUNNING
+export DRY_RUN ASSUME_YES ALLOW_REMOVE BACKUP_DIR SYSTEMD_RUNNING
 
 # Один экземпляр одновременно
 exec 9> /run/debian_init.lock 2>/dev/null || exec 9> /tmp/debian_init.lock

@@ -189,17 +189,28 @@ extra_docker() {
         log_info "  Docker уже установлен"
     else
         ensure_pkgs ca-certificates curl
-        local codename
-        codename="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
-        [[ -n "$codename" ]] || die "Не удалось определить codename Debian"
+        local codename repo_distro="debian"
+        # У Docker отдельные репозитории для Debian и Ubuntu: deb-репозиторий
+        # с ubuntu-codename даёт 404. Производные Ubuntu (Mint, Pop!_OS)
+        # используют кодовое имя Ubuntu из UBUNTU_CODENAME.
+        if [[ "$OS_ID" == ubuntu ]]; then
+            repo_distro="ubuntu"
+            codename="${VERSION_CODENAME:-}"
+        elif [[ " ${ID_LIKE:-} " == *" ubuntu "* && -n "${UBUNTU_CODENAME:-}" ]]; then
+            repo_distro="ubuntu"
+            codename="$UBUNTU_CODENAME"
+        else
+            codename="${VERSION_CODENAME:-}"
+        fi
+        [[ -n "$codename" ]] || die "Не удалось определить codename дистрибутива"
         run install -d -m 0755 /etc/apt/keyrings
-        run curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+        run curl -fsSL "https://download.docker.com/linux/$repo_distro/gpg" -o /etc/apt/keyrings/docker.asc
         run chmod a+r /etc/apt/keyrings/docker.asc
         local tmp
         tmp="$(mktemp)"
         cat > "$tmp" <<EOF
 Types: deb
-URIs: https://download.docker.com/linux/debian
+URIs: https://download.docker.com/linux/$repo_distro
 Suites: $codename
 Components: stable
 Architectures: $(dpkg --print-architecture)
